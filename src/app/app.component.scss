@@ -1,0 +1,11 @@
+:host {
+    height: calc(100% - 20px);
+    width: calc(100% - 20px);
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+
+    padding: 10px;
+}

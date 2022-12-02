@@ -1,53 +1,105 @@
-import { Component, OnInit } from '@angular/core';
+import { AfterViewInit, Component } from '@angular/core';
+import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
+import { environment } from './environment/environment';
+import { ApiResponse } from './abstractions/api-response';
+import { UserLocation } from './abstractions/user-location';
 
 @Component({
     selector: 'app-root',
     templateUrl: './app.component.html',
     styleUrls: ['./app.component.scss']
 })
-export class AppComponent implements OnInit {
-    title = 'projectjeep';
+export class AppComponent implements AfterViewInit {
+
+    /** Total days of forecast */
+    totalDays = 0;
+
+    /** Total days of rain found in forecast */
+    totalRainDays = 0;
+
+    /** Flag to indicate when in process of retrieving data */
+    isLoading = true;
+
+    /** Error message to display to UI */
+    errorMessage: string = '';
+
+    /** Keeps track of user's location in browser */
+    private userLocation: UserLocation;
+
+    constructor(private http: HttpClient) { }
 
     /** On init lifecycle hook */
-    ngOnInit() {
+    ngAfterViewInit() {
         this.getLocation();
     }
 
     /** Gets location from browser */
     private getLocation() {
         if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(this.showPosition, this.handleError);
+            navigator.geolocation.getCurrentPosition(position => {
+                this.setPosition(position)
+            });
         } else {
             console.error("Geolocation is not supported by this browser.");
         }
     }
 
-    /** Prints out position in console */
-    private showPosition(position: any) {
-        console.log(
-            `Latitude: ${position.coords.latitude}, longitude: ${position.coords.longitude}`
-        );
+    /** Sets position of user */
+    private setPosition(position: GeolocationPosition) {
+        if (position) {
+            this.userLocation = new UserLocation(
+                position.coords.latitude,
+                position.coords.longitude
+            );
+
+            this.getForecast();
+        }
     }
 
-    /** Handles error from HTML Geolocation API */
-    private handleError(error: any) {
-        let errorStr;
-        switch (error.code) {
-            case error.PERMISSION_DENIED:
-                errorStr = 'User denied the request for Geolocation.';
-                break;
-            case error.POSITION_UNAVAILABLE:
-                errorStr = 'Location information is unavailable.';
-                break;
-            case error.TIMEOUT:
-                errorStr = 'The request to get user location timed out.';
-                break;
-            case error.UNKNOWN_ERROR:
-                errorStr = 'An unknown error occurred.';
-                break;
-            default:
-                errorStr = 'An unknown error occurred.';
+    /** Calls API to get forecast */
+    private getForecast() {
+        this.http
+            .get<any>('https://weatherbit-v1-mashape.p.rapidapi.com/forecast/daily', this.getHeaders())
+            .subscribe(
+                (response: ApiResponse) => {
+                    this.parseForecast(response);
+                    this.isLoading = false;
+                },
+                (error) => {
+                    this.handleError(error);
+                    this.isLoading = false;
+                }
+            );
+    }
+
+    /** Returns header to send to API */
+    private getHeaders() {
+        return {
+            headers: new HttpHeaders({
+                'X-RapidAPI-Key': environment.XRapidAPIKey,
+                'X-RapidAPI-Host': environment.XRapidAPIHost
+            }),
+            params: {
+                lat: this.userLocation.latitude.toString(),
+                lon: this.userLocation.longitude.toString()
+            }
         }
-        console.error('Error occurred: ' + errorStr);
+    }
+
+    /** Parses API response to see if it'll rain */
+    private parseForecast(response: ApiResponse) {
+        this.totalDays = response.data.length;
+
+        this.totalRainDays = 0;
+        response.data.forEach(day => {
+            if (day.weather.code <= 522) {
+                this.totalRainDays += 1;
+            }
+        });
+    }
+
+    /** Sets error message to display in UI */
+    private handleError(error: HttpErrorResponse) {
+        this.errorMessage = error.error.message;
     }
 }
